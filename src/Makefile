@@ -3,7 +3,7 @@ CC=icc
 LD= ifort
 OPT=
 FFLAGS= -qopenmp -g -O3
-CFLAGS= -qopenmp -g -xCOMMON-AVX512 -O3 -qopt-report=5 -qopt-report-phase:vec
+CFLAGS= -qopenmp -g -xCORE-AVX512 -O3 -qopt-report=5 -qopt-report-phase:vec
 
 cov: main.o Covariance1.o Covariance${DBG}.o check.o
 	${FC} ${FFLAGS} main.o Covariance1.o Covariance.o check.o -o cov

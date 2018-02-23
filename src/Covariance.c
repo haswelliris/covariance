@@ -35,8 +35,8 @@ void findcov_(int *_NVAR, int *_NROW, int *_NV, double *_MType, double *_COV)
 
     int iv1, iv2, i2, iobs;
 
-    double *M = malloc((NROW + 4) * (NVAR + 4) * sizeof(double));
-    memset(M, 0, sizeof(M));
+    double *M = (double*)_mm_malloc((NROW + 4) * (NVAR + 4) * sizeof(double),64);        
+    // memset(M, 0, sizeof(M));
 
     #pragma omp parallel for private(iv1, iobs)
     for (iv1 = 0; iv1 < NVAR; iv1++)
@@ -49,7 +49,7 @@ void findcov_(int *_NVAR, int *_NROW, int *_NV, double *_MType, double *_COV)
             M[pos2] = MType[pos];
         }
     }
-    printf("ca");
+    
     #pragma omp parallel for private(iv1, iv2, i2, iobs)
     for (iv1 = 0; iv1 < NVAR; iv1++)
     {
@@ -88,9 +88,7 @@ void findcov_(int *_NVAR, int *_NROW, int *_NV, double *_MType, double *_COV)
             }
             MeanX1 = MeanX1 / (NROW - NumMissing);
             MeanX2 = MeanX2 / (NROW - NumMissing);
-
             Covariance = Covariance / (NROW - NumMissing) - MeanX1 * MeanX2;
-
             COV[iv1 + iv2 * NVAR] = Covariance;
         }
     }
