@@ -4,54 +4,24 @@
 #include <stdint.h>
 #include <malloc.h>
 
-#if __FLOAT_WORD_ORDER__ == __ORDER_BIG_ENDIAN__
-
-typedef union {
-    double value;
-    struct
-    {
-        u_int32_t msw;
-        u_int32_t lsw;
-    } parts;
-    struct
-    {
-        u_int64_t w;
-    } xparts;
-} ieee_double_shape_type;
-
-#endif
-
-#if __FLOAT_WORD_ORDER__ == __ORDER_LITTLE_ENDIAN__
-
-typedef union {
-    double value;
-    struct
-    {
-        u_int32_t lsw;
-        u_int32_t msw;
-    } parts;
-    struct
-    {
-        u_int64_t w;
-    } xparts;
-} ieee_double_shape_type;
-
-#endif
-
-#define EXTRACT_WORDS(ix0, ix1, d)   \
-    do                               \
-    {                                \
-        ieee_double_shape_type ew_u; \
-        ew_u.value = (d);            \
-        (ix0) = ew_u.parts.msw;      \
-        (ix1) = ew_u.parts.lsw;      \
-    } while (0)
-
 double *MType;
 double *COV;
 int NVAR;
 int NROW;
 int NV;
+
+int IsMissingPheno(double d)
+{
+    if(isnan(d))
+    {
+        return 1;
+    }
+    else if(d - 65.0 <= 1.e-03 && d - 65.0 >= -1.e-03)
+    {
+        return 1;
+    }
+    return 0;
+}
 
 void findcov_(int *_NVAR, int *_NROW, int *_NV, double *_MType, double *_COV)
 {
@@ -61,43 +31,25 @@ void findcov_(int *_NVAR, int *_NROW, int *_NV, double *_MType, double *_COV)
     NROW = *_NROW;
     NV = *_NV;
 
-    //int *flag = malloc(sizeof(MType)/sizeof(MType[0])*sizeof(int)+100);
-    int *flag = malloc((NROW + 2) * (NVAR + 2) * sizeof(int));
-    memset(flag, 0, sizeof(flag));
-
     //printf("C code, NVAR = %d, NROW = %d, NV = %d\n", NVAR, NROW, NV);
 
     int iv1, iv2, i2, iobs;
 
+    double *M = malloc((NROW + 4) * (NVAR + 4) * sizeof(double));
+    memset(M, 0, sizeof(M));
+
     #pragma omp parallel for private(iv1, iobs)
     for (iv1 = 0; iv1 < NVAR; iv1++)
     {
+        int temp = iv1*NROW;
         for (iobs = 0; iobs < NROW; iobs++)
         {
-
-            //isnan function
-            int32_t hx, lx, lxx;
-            //double d = X1[iobs * NVAR];
-            int pos = iv1+iobs * NVAR;
-            double d = MType[pos];
-            EXTRACT_WORDS(hx, lx, MType[pos]);
-            lxx = 0 - lx;
-            lxx |= lx;
-            hx &= 0x7fffffff;
-            hx |= (uint32_t)lxx >> 31;
-            hx = 0x7ff00000 - hx;
-            if ((int)(((uint32_t)hx) >> 31))
-            {
-                flag[pos] = 1;
-            }
-            else if (d - 65.0 <= 1.e-03 && d - 65.0 >= -1.e-03)
-            {
-                flag[pos] = 1;
-            }
+            int pos = iv1+iobs*NVAR;
+            int pos2 = iobs + temp;
+            M[pos2] = MType[pos];
         }
     }
-    printf("out\n");
-
+    printf("ca");
     #pragma omp parallel for private(iv1, iv2, i2, iobs)
     for (iv1 = 0; iv1 < NVAR; iv1++)
     {
@@ -110,28 +62,30 @@ void findcov_(int *_NVAR, int *_NROW, int *_NV, double *_MType, double *_COV)
             double Covariance = 0.0;
 
             double *X1, *X2;
-            X1 = MType + iv1;
-            X2 = MType + I2;
+            X1 = M + iv1*NROW;
+            X2 = M + I2*NROW;
 
-            for (iobs = 0; iobs < NROW; iobs++)
-            //for(iobs=0;iobs<NROW*NVAR;iobs+=NVAR)
+            //for (iobs = 0; iobs < NROW; iobs++)
+            #pragma ivdep
+            for(iobs=0;iobs<NROW;iobs++)
             {
-                if (flag[iv1 + iobs * NVAR] == 1 || flag[I2 + iobs * NVAR] == 1)
+                if(IsMissingPheno(X1[iobs]) || IsMissingPheno(X2[iobs]))   
+                // if(IsMissingPheno(X1[iobs * NVAR]) || IsMissingPheno(X2[iobs * NVAR]))        
+        //        if (flag[iv1 + iobs * NVAR] == 1 || flag[I2 + iobs * NVAR] == 1)
                 {
                     NumMissing++;
                 }
                 else
                 {
-                    MeanX1 += X1[iobs * NVAR];
-                    MeanX2 += X2[iobs * NVAR];
-                    Covariance += X1[iobs * NVAR] * X2[iobs * NVAR];
-
-                    // MeanX1 += X1[iobs];
-                    // MeanX2 += X2[iobs];
-                    // Covariance += X1[iobs] * X2[iobs];
+                //     MeanX1 += X1[iobs * NVAR];
+                //     MeanX2 += X2[iobs * NVAR];
+                //     Covariance += X1[iobs * NVAR] * X2[iobs * NVAR];
+                    #pragma vector aligned
+                    MeanX1 += X1[iobs];
+                    MeanX2 += X2[iobs];
+                    Covariance += X1[iobs] * X2[iobs];
                 }
             }
-
             MeanX1 = MeanX1 / (NROW - NumMissing);
             MeanX2 = MeanX2 / (NROW - NumMissing);
 
