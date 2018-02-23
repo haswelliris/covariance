@@ -2,8 +2,8 @@ FC=ifort
 CC=icc
 LD= ifort
 OPT=
-FFLAGS= -qopenmp
-CFLAGS= -qopenmp
+FFLAGS= -qopenmp -g -O3
+CFLAGS= -qopenmp -g -xCOMMON-AVX512 -O3
 
 cov: main.o Covariance1.o Covariance${DBG}.o check.o
 	${FC} ${FFLAGS} main.o Covariance1.o Covariance.o check.o -o cov
